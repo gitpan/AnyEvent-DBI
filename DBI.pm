@@ -36,7 +36,7 @@ separate "DBI-Server" processes and sending them requests.
 It means that you can run DBI requests in parallel to other tasks.
 
 The overhead for very simple statements ("select 0") is somewhere
-around 120% to 200% (dual/single core CPU) compared to an explicit
+around 100% to 120% (dual/single core CPU) compared to an explicit
 prepare_cached/execute/fetchrow_arrayref/finish combination.
 
 =head2 ERROR HANDLING
@@ -57,15 +57,14 @@ error.
 
 package AnyEvent::DBI;
 
-use strict qw(vars subs);
-no warnings;
+use common::sense;
 
 use Carp;
 use Socket ();
 use Scalar::Util ();
 use Storable ();
 
-use DBI ();
+use DBI (); # only needed in child actually - do it before fork & !exec?
 
 use AnyEvent ();
 use AnyEvent::Util ();
@@ -74,7 +73,7 @@ use Errno ();
 use Fcntl ();
 use POSIX ();
 
-our $VERSION = '2.0';
+our $VERSION = '2.1';
 
 our $FD_MAX = eval { POSIX::sysconf (&POSIX::_SC_OPEN_MAX) - 1 } || 1023;
 
@@ -236,7 +235,7 @@ received from C<new> to make requests.
 
 If you supply an C<exec_server> argument, then the DBI server process will
 fork and exec another perl interpreter (using C<$^X>) with just the
-AnyEvent::DBI proxy running. This will provide the cleanest possible porxy
+AnyEvent::DBI proxy running. This will provide the cleanest possible proxy
 for your database server.
 
 If you do not supply the C<exec_server> argument (or supply it with a
@@ -288,7 +287,7 @@ sub new {
    my ($class, $dbi, $user, $pass, %arg) = @_;
 
    my ($client, $server) = AnyEvent::Util::portable_socketpair
-      or croak "unable to create Anyevent::DBI communications pipe: $!";
+      or croak "unable to create AnyEvent::DBI communications pipe: $!";
 
    my %dbi_args = %arg;
    delete @dbi_args{qw(on_connect on_error timeout exec_server)};
@@ -304,10 +303,10 @@ sub new {
    {
       Scalar::Util::weaken (my $self = $self);
 
-      $self->{rw} = AnyEvent->io (fh => $client, poll => "r", cb => sub {
+      $self->{rw} = AE::io $client, 0, sub {
          return unless $self;
 
-         $self->{last_activity} = AnyEvent->now;
+         $self->{last_activity} = AE::now;
 
          my $len = sysread $client, $rbuf, 65536, length $rbuf;
 
@@ -349,21 +348,21 @@ sub new {
             # todo, caller?
             $self->_error ("read error: $!", @caller, 1);
          }
-      });
+      };
 
       $self->{tw_cb} = sub {
          if ($self->{timeout} && $self->{last_activity}) {
-            if (AnyEvent->now > $self->{last_activity} + $self->{timeout}) {
+            if (AE::now > $self->{last_activity} + $self->{timeout}) {
                # we did time out
                my $req = $self->{queue}[0];
                $self->_error (timeout => $req->[1], $req->[2], 1); # timeouts are always fatal
             } else {
                # we need to re-set the timeout watcher
-               $self->{tw} = AnyEvent->timer (
-                  after => $self->{last_activity} + $self->{timeout} - AnyEvent->now,
-                  cb    => $self->{tw_cb},
-               );
-               Scalar::Util::weaken $self;
+               $self->{tw} = AE::timer
+                  $self->{last_activity} + $self->{timeout} - AE::now,
+                  0,
+                  $self->{tw_cb},
+               ;
             }
          } else {
             # no timeout check wanted, or idle
@@ -374,7 +373,7 @@ sub new {
       $self->{ww_cb} = sub {
          return unless $self;
 
-         $self->{last_activity} = AnyEvent->now;
+         $self->{last_activity} = AE::now;
 
          my $len = syswrite $client, $self->{wbuf}
             or return delete $self->{ww};
@@ -432,30 +431,12 @@ sub _server_pid {
 }
 
 sub kill_child {
-   my $self      = shift;
-   my $child_pid = delete $self->{child_pid};
-   if ($child_pid) {
-      # send SIGKILL in two seconds
-      my $murder_timer = AnyEvent->timer (
-         after => 2,
-         cb    => sub {
-            kill 9, $child_pid;
-         },
-      );
+   my $self = shift;
 
-      # reap process
-      my $kid_watcher; $kid_watcher = AnyEvent->child (
-         pid => $child_pid,
-         cb  => sub {
-            # just hold on to this so it won't go away
-            undef $kid_watcher;
-            # cancel SIGKILL
-            undef $murder_timer;
-         },
-      );
-
-      close $self->{fh};
+   if (my $pid = delete $self->{child_pid}) {
+      kill TERM => $pid;
    }
+   close delete $self->{fh};
 }
 
 sub DESTROY {
@@ -528,7 +509,7 @@ sub _req {
 
    # re-start timeout if necessary
    if ($self->{timeout} && !$self->{tw}) {
-      $self->{last_activity} = AnyEvent->now;
+      $self->{last_activity} = AE::now;
       $self->{tw_cb}->();
    }
 
@@ -539,7 +520,7 @@ sub _req {
       substr $self->{wbuf}, 0, $len, "";
 
       # still any left? then install a write watcher
-      $self->{ww} = AnyEvent->io (fh => $self->{fh}, poll => "w", cb => $self->{ww_cb})
+      $self->{ww} = AE::io $self->{fh}, 1, $self->{ww_cb}
          if length $self->{wbuf};
    }
 }

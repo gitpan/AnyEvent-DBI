@@ -10,3 +10,4 @@ t/02_sql_lite.t
 t/fake-mysql
 t/myserver.conf
 META.yml                                 Module meta-data (added by MakeMaker)
+META.json                                Module meta-data (added by MakeMaker)
