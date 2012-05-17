@@ -73,7 +73,7 @@ use Errno ();
 use Fcntl ();
 use POSIX ();
 
-our $VERSION = '2.1';
+our $VERSION = '2.2';
 
 our $FD_MAX = eval { POSIX::sysconf (&POSIX::_SC_OPEN_MAX) - 1 } || 1023;
 
@@ -306,12 +306,11 @@ sub new {
       $self->{rw} = AE::io $client, 0, sub {
          return unless $self;
 
-         $self->{last_activity} = AE::now;
-
          my $len = sysread $client, $rbuf, 65536, length $rbuf;
 
          if ($len > 0) {
             # we received data, so reset the timer
+            $self->{last_activity} = AE::now;
 
             while () {
                my $len = unpack "L", $rbuf;
@@ -337,8 +336,10 @@ sub new {
                }
 
                # no more queued requests, so become idle
-               undef $self->{last_activity}
-                  if $self && !@{ $self->{queue} };
+               if ($self && !@{ $self->{queue} }) {
+                 undef $self->{last_activity};
+                 $self->{tw_cb}->();
+               }
             }
 
          } elsif (defined $len) {
@@ -434,8 +435,13 @@ sub kill_child {
    my $self = shift;
 
    if (my $pid = delete $self->{child_pid}) {
+      # kill and reap process
+      my $kid_watcher; $kid_watcher = AE::child $pid, sub {
+         undef $kid_watcher;
+      };
       kill TERM => $pid;
    }
+
    close delete $self->{fh};
 }
 
