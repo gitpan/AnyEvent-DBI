@@ -1,8 +1,17 @@
 #!/usr/bin/perl
+
 BEGIN {
    unless ($ENV{PERL_ANYEVENT_DBI_TESTS}) {
       print "1..0 # SKIP env var PERL_ANYEVENT_DBI_TESTS not set\n"; exit;
    }
+   eval {
+      require DBD::SQLite;
+   };
+   if ($@) {
+      print "1..0 # SKIP this test requires Test::More and DBD::SQLite\n"; exit;
+   }
+   require Test::More;
+   import Test::More tests => 43;
 }
 
 use strict;
@@ -10,16 +19,6 @@ use warnings;
 use AnyEvent;
 use AnyEvent::DBI;
 use File::Temp qw(tempfile);
-
-eval {
-   require Test::More;
-   import Test::More tests => 43;
-   require DBD::SQLite;
-};
-if ($@) {
-   print 'ok 1 # skip - this test requires Test::More and DBD::SQLite'."\n";
-   exit 0;
-}
 
 # we are going to watch what the sub-processes send to stderr
 close STDERR;

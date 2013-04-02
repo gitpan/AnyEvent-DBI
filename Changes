@@ -1,5 +1,10 @@
 Revision history for AnyEvent::DBI
 
+2.3  Tue Apr  2 02:59:12 CEST 2013
+	- fix begin_work, commit and rollback, that were broken due
+          to a precedence problem (analyzed by Jerry Lundström).
+        - slightly improve tests.
+
 2.2  Thu May 17 04:13:27 CEST 2012
 	- timeouts didn't trigger (Adam Rosenstein).
         - do not leave zombie processes (Adam Rosenstein).

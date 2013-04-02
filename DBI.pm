@@ -73,7 +73,7 @@ use Errno ();
 use Fcntl ();
 use POSIX ();
 
-our $VERSION = '2.2';
+our $VERSION = '2.3';
 
 our $FD_MAX = eval { POSIX::sysconf (&POSIX::_SC_OPEN_MAX) - 1 } || 1023;
 
@@ -110,15 +110,15 @@ sub req_attr {
 }
 
 sub req_begin_work {
-   [1, $DBH->begin_work or die [$DBI::errstr]]
+   [1, $DBH->begin_work || die [$DBI::errstr]]
 }
 
 sub req_commit {
-   [1, $DBH->commit     or die [$DBI::errstr]]
+   [1, $DBH->commit     || die [$DBI::errstr]]
 }
 
 sub req_rollback {
-   [1, $DBH->rollback   or die [$DBI::errstr]]
+   [1, $DBH->rollback   || die [$DBI::errstr]]
 }
 
 sub req_func {

@@ -3,17 +3,12 @@ BEGIN {
    unless ($ENV{PERL_ANYEVENT_DBI_TESTS}) {
       print "1..0 # SKIP env var PERL_ANYEVENT_DBI_TESTS not set\n"; exit;
    }
-}
-
-BEGIN {
    eval {
       require DBIx::MyServer;
       require DBIx::MyServer::DBI;
    };
    if ($@) {
-      require Test::More;
-      import Test::More skip_all => 'these tests require DBIx::MyServer';
-      exit 0;
+      print "1..0 # SKIP these tests require DBIx::MyServer\n"; exit;
    }
 }
 
